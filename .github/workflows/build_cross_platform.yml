@@ -7,44 +7,42 @@ on:
 
 jobs:
   # ==================================================
-  # Job 1: RHEL8用ビルド (Rocky Linux 8 コンテナ使用)
+  # Job 1: RHEL8用ビルド (Docker run方式に変更)
   # ==================================================
   build-rhel8:
     runs-on: ubuntu-latest
-    container:
-      image: rockylinux:8
     
     steps:
+    # 1. ホスト(Ubuntu)側でチェックアウト。これならGitがあるので確実に成功する。
     - uses: actions/checkout@v4
 
-    - name: Install Dependencies
+    # 2. Dockerを使ってRHEL8環境内でビルドを実行する
+    #    -v ${{ github.workspace }}:/work : ソースコードをコンテナ内にマウント
+    - name: Build in RHEL8 Container
       run: |
-        dnf install -y git gcc gcc-c++ python3 tar unzip which
+        docker run --rm -v ${{ github.workspace }}:/work -w /work rockylinux:8 /bin/bash -c "
+          # 必要なツールのインストール
+          dnf install -y git gcc gcc-c++ python3 tar unzip which &&
+          
+          # Bazeliskのダウンロード (Linux用)
+          curl -L https://github.com/bazelbuild/bazelisk/releases/download/v1.18.0/bazelisk-linux-amd64 -o /usr/bin/bazel &&
+          chmod +x /usr/bin/bazel &&
+          
+          # ビルド実行
+          # .bazelversionファイルが存在するため、正しいBazelバージョンが自動選択されます
+          bazel build \
+            --jobs=2 \
+            --compilation_mode=opt \
+            --linkopt=-static-libstdc++ \
+            --linkopt=-static-libgcc \
+            //verilog/tools/lint:verible-verilog-lint
+        "
 
-    - name: Setup Bazelisk
-      run: |
-        curl -L https://github.com/bazelbuild/bazelisk/releases/download/v1.18.0/bazelisk-linux-amd64 -o /usr/local/bin/bazel
-        chmod +x /usr/local/bin/bazel
-
-    - name: Mount bazel cache
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/bazel
-        key: rhel8-bazel-${{ hashFiles('WORKSPACE', 'MODULE.bazel') }}
-        restore-keys: rhel8-bazel-
-
-    - name: Build Verible Lint (Linux)
-      run: |
-        bazel build \
-          --jobs=2 \
-          --compilation_mode=opt \
-          --linkopt=-static-libstdc++ \
-          --linkopt=-static-libgcc \
-          //verilog/tools/lint:verible-verilog-lint
-
+    # 3. アーティファクトのリネーム
     - name: Rename Artifact
       run: |
         SHORT_SHA=$(git rev-parse --short HEAD)
+        # ビルド生成物はマウントしたディレクトリに残っています
         cp bazel-bin/verilog/tools/lint/verible-verilog-lint ./verible-lint-rhel8-${SHORT_SHA}
 
     - uses: actions/upload-artifact@v4
@@ -53,7 +51,7 @@ jobs:
         path: ./verible-lint-rhel8-*
 
   # ==================================================
-  # Job 2: Windows用ビルド (Windows Server使用)
+  # Job 2: Windows用ビルド (Manual Setup方式に変更)
   # ==================================================
   build-windows:
     runs-on: windows-latest
@@ -61,18 +59,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # WindowsでもLinuxと同じコマンド(cp, mvなど)を使えるようにbashを指定
-    - name: Setup Bazel
-      uses: bazelbuild/setup-bazelisk@v2
+    # アクションを使わず、手動でダウンロードしてPATHに通す (エラー回避)
+    - name: Setup Bazelisk Manually
+      shell: bash
+      run: |
+        mkdir -p $HOME/bin
+        curl -L https://github.com/bazelbuild/bazelisk/releases/download/v1.18.0/bazelisk-windows-amd64.exe -o $HOME/bin/bazel.exe
+        echo "$HOME/bin" >> $GITHUB_PATH
 
-    - name: Mount bazel cache
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/bazel
-        key: windows-bazel-${{ hashFiles('WORKSPACE', 'MODULE.bazel') }}
-        restore-keys: windows-bazel-
+    # WindowsのCacheはトラブルが多いので一旦無効化して確実にビルドを通す
 
-    # Windows特有のオプションが必要な場合がありますが、基本は同じです
     - name: Build Verible Lint (Windows)
       shell: bash
       run: |
@@ -81,7 +77,6 @@ jobs:
           --compilation_mode=opt \
           //verilog/tools/lint:verible-verilog-lint
 
-    # Windows版は拡張子 .exe が付く点に注意してリネーム
     - name: Rename Artifact
       shell: bash
       run: |
