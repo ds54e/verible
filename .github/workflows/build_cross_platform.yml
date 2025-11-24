@@ -35,13 +35,13 @@ jobs:
             --compilation_mode=opt \
             --linkopt=-static-libstdc++ \
             --linkopt=-static-libgcc \
-            //verilog/tools/lint:verible-verilog-lint
+            //verible/verilog/tools/lint:verible-verilog-lint
         "
 
     - name: Rename Artifact
       run: |
         SHORT_SHA=$(git rev-parse --short HEAD)
-        cp bazel-bin/verilog/tools/lint/verible-verilog-lint ./verible-lint-rhel8-${SHORT_SHA}
+        cp bazel-bin/verible/verilog/tools/lint/verible-verilog-lint ./verible-lint-rhel8-${SHORT_SHA}
 
     - uses: actions/upload-artifact@v4
       with:
@@ -73,13 +73,13 @@ jobs:
         bazel build \
           --jobs=2 \
           --compilation_mode=opt \
-          //verilog/tools/lint:verible-verilog-lint
+          //verible/verilog/tools/lint:verible-verilog-lint
 
     - name: Rename Artifact
       shell: bash
       run: |
         SHORT_SHA=$(git rev-parse --short HEAD)
-        cp bazel-bin/verilog/tools/lint/verible-verilog-lint.exe ./verible-lint-windows-${SHORT_SHA}.exe
+        cp bazel-bin/verible/verilog/tools/lint/verible-verilog-lint.exe ./verible-lint-windows-${SHORT_SHA}.exe
 
     - uses: actions/upload-artifact@v4
       with:
