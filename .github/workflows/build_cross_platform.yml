@@ -17,6 +17,7 @@ jobs:
 
     - name: Build in RHEL8 Container
       run: |
+        SHORT_SHA=$(git rev-parse --short HEAD)
         docker run --rm -v ${{ github.workspace }}:/work -w /work rockylinux:8 /bin/bash -c "
           
           # 【変更】バージョンを 7.4.1 に変更
@@ -36,13 +37,10 @@ jobs:
             --linkopt=-static-libstdc++ \
             --linkopt=-static-libgcc \
             --linkopt=-lstdc++fs \
-            //verible/verilog/tools/lint:verible-verilog-lint
+            //verible/verilog/tools/lint:verible-verilog-lint && \
+          cp bazel-bin/verible/verilog/tools/lint/verible-verilog-lint /work/verible-lint-rhel8-${SHORT_SHA} && \
+          chmod a+r /work/verible-lint-rhel8-${SHORT_SHA}
         "
-
-    - name: Rename Artifact
-      run: |
-        SHORT_SHA=$(git rev-parse --short HEAD)
-        cp bazel-bin/verible/verilog/tools/lint/verible-verilog-lint ./verible-lint-rhel8-${SHORT_SHA}
 
     - uses: actions/upload-artifact@v4
       with:
