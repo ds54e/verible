@@ -1,0 +1,94 @@
+name: Build Verible (RHEL8 & Windows)
+
+on:
+  push:
+    branches: [ "my-custom-verible" ]
+  workflow_dispatch:
+
+jobs:
+  # ==================================================
+  # Job 1: RHEL8用ビルド (Rocky Linux 8 コンテナ使用)
+  # ==================================================
+  build-rhel8:
+    runs-on: ubuntu-latest
+    container:
+      image: rockylinux:8
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: |
+        dnf install -y git gcc gcc-c++ python3 tar unzip which
+
+    - name: Setup Bazelisk
+      run: |
+        curl -L https://github.com/bazelbuild/bazelisk/releases/download/v1.18.0/bazelisk-linux-amd64 -o /usr/local/bin/bazel
+        chmod +x /usr/local/bin/bazel
+
+    - name: Mount bazel cache
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/bazel
+        key: rhel8-bazel-${{ hashFiles('WORKSPACE', 'MODULE.bazel') }}
+        restore-keys: rhel8-bazel-
+
+    - name: Build Verible Lint (Linux)
+      run: |
+        bazel build \
+          --jobs=2 \
+          --compilation_mode=opt \
+          --linkopt=-static-libstdc++ \
+          --linkopt=-static-libgcc \
+          //verilog/tools/lint:verible-verilog-lint
+
+    - name: Rename Artifact
+      run: |
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        cp bazel-bin/verilog/tools/lint/verible-verilog-lint ./verible-lint-rhel8-${SHORT_SHA}
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: verible-lint-rhel8
+        path: ./verible-lint-rhel8-*
+
+  # ==================================================
+  # Job 2: Windows用ビルド (Windows Server使用)
+  # ==================================================
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    # WindowsでもLinuxと同じコマンド(cp, mvなど)を使えるようにbashを指定
+    - name: Setup Bazel
+      uses: bazelbuild/setup-bazelisk@v2
+
+    - name: Mount bazel cache
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/bazel
+        key: windows-bazel-${{ hashFiles('WORKSPACE', 'MODULE.bazel') }}
+        restore-keys: windows-bazel-
+
+    # Windows特有のオプションが必要な場合がありますが、基本は同じです
+    - name: Build Verible Lint (Windows)
+      shell: bash
+      run: |
+        bazel build \
+          --jobs=2 \
+          --compilation_mode=opt \
+          //verilog/tools/lint:verible-verilog-lint
+
+    # Windows版は拡張子 .exe が付く点に注意してリネーム
+    - name: Rename Artifact
+      shell: bash
+      run: |
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        cp bazel-bin/verilog/tools/lint/verible-verilog-lint.exe ./verible-lint-windows-${SHORT_SHA}.exe
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: verible-lint-windows
+        path: ./verible-lint-windows-*.exe
