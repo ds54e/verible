@@ -35,6 +35,7 @@ jobs:
             --compilation_mode=opt \
             --linkopt=-static-libstdc++ \
             --linkopt=-static-libgcc \
+            --linkopt=-lstdc++fs \
             //verible/verilog/tools/lint:verible-verilog-lint
         "
 
