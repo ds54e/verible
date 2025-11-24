@@ -7,7 +7,7 @@ on:
 
 jobs:
   # ==================================================
-  # Job 1: RHEL8用ビルド (Fix: バージョン6.5.0強制)
+  # Job 1: RHEL8用ビルド (Fix: Bazel 7.4.1)
   # ==================================================
   build-rhel8:
     runs-on: ubuntu-latest
@@ -17,21 +17,19 @@ jobs:
 
     - name: Build in RHEL8 Container
       run: |
-        # ポイント: export USE_BAZEL_VERSION=6.5.0 をコンテナ内のコマンド先頭で実行
         docker run --rm -v ${{ github.workspace }}:/work -w /work rockylinux:8 /bin/bash -c "
           
-          # 1. バージョン固定 (ここが最重要)
-          export USE_BAZEL_VERSION=6.5.0 &&
+          # 【変更】バージョンを 7.4.1 に変更
+          export USE_BAZEL_VERSION=7.4.1 &&
           
-          # 2. ツール類インストール
+          # ツール類インストール
           dnf install -y git gcc gcc-c++ python3 tar unzip which &&
           
-          # 3. Bazelisk取得 (Linux用)
+          # Bazelisk取得
           curl -L https://github.com/bazelbuild/bazelisk/releases/download/v1.18.0/bazelisk-linux-amd64 -o /usr/bin/bazel &&
           chmod +x /usr/bin/bazel &&
           
-          # 4. ビルド実行
-          # バージョン6.5.0であれば、古いWORKSPACE定義でも正しく動作します
+          # ビルド実行
           bazel build \
             --jobs=2 \
             --compilation_mode=opt \
@@ -43,7 +41,6 @@ jobs:
     - name: Rename Artifact
       run: |
         SHORT_SHA=$(git rev-parse --short HEAD)
-        # コンテナ内で生成されたバイナリをリネーム
         cp bazel-bin/verilog/tools/lint/verible-verilog-lint ./verible-lint-rhel8-${SHORT_SHA}
 
     - uses: actions/upload-artifact@v4
@@ -52,7 +49,7 @@ jobs:
         path: ./verible-lint-rhel8-*
 
   # ==================================================
-  # Job 2: Windows用ビルド (Fix: バージョン6.5.0強制 & 手動セットアップ)
+  # Job 2: Windows用ビルド (Fix: Bazel 7.4.1)
   # ==================================================
   build-windows:
     runs-on: windows-latest
@@ -60,7 +57,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # アクションを使わず、手動でダウンロードしてPATHに通す (Cacheエラー回避)
     - name: Setup Bazelisk Manually
       shell: bash
       run: |
@@ -70,9 +66,9 @@ jobs:
 
     - name: Build Verible Lint (Windows)
       shell: bash
-      # 【重要】Windows側も環境変数でバージョンを固定
+      # 【変更】バージョンを 7.4.1 に変更
       env:
-        USE_BAZEL_VERSION: 6.5.0
+        USE_BAZEL_VERSION: 7.4.1
       run: |
         bazel build \
           --jobs=2 \
