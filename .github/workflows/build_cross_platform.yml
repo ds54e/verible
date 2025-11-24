@@ -7,29 +7,31 @@ on:
 
 jobs:
   # ==================================================
-  # Job 1: RHEL8用ビルド (Docker run方式に変更)
+  # Job 1: RHEL8用ビルド (Fix: バージョン6.5.0強制)
   # ==================================================
   build-rhel8:
     runs-on: ubuntu-latest
     
     steps:
-    # 1. ホスト(Ubuntu)側でチェックアウト。これならGitがあるので確実に成功する。
     - uses: actions/checkout@v4
 
-    # 2. Dockerを使ってRHEL8環境内でビルドを実行する
-    #    -v ${{ github.workspace }}:/work : ソースコードをコンテナ内にマウント
     - name: Build in RHEL8 Container
       run: |
+        # ポイント: export USE_BAZEL_VERSION=6.5.0 をコンテナ内のコマンド先頭で実行
         docker run --rm -v ${{ github.workspace }}:/work -w /work rockylinux:8 /bin/bash -c "
-          # 必要なツールのインストール
+          
+          # 1. バージョン固定 (ここが最重要)
+          export USE_BAZEL_VERSION=6.5.0 &&
+          
+          # 2. ツール類インストール
           dnf install -y git gcc gcc-c++ python3 tar unzip which &&
           
-          # Bazeliskのダウンロード (Linux用)
+          # 3. Bazelisk取得 (Linux用)
           curl -L https://github.com/bazelbuild/bazelisk/releases/download/v1.18.0/bazelisk-linux-amd64 -o /usr/bin/bazel &&
           chmod +x /usr/bin/bazel &&
           
-          # ビルド実行
-          # .bazelversionファイルが存在するため、正しいBazelバージョンが自動選択されます
+          # 4. ビルド実行
+          # バージョン6.5.0であれば、古いWORKSPACE定義でも正しく動作します
           bazel build \
             --jobs=2 \
             --compilation_mode=opt \
@@ -38,11 +40,10 @@ jobs:
             //verilog/tools/lint:verible-verilog-lint
         "
 
-    # 3. アーティファクトのリネーム
     - name: Rename Artifact
       run: |
         SHORT_SHA=$(git rev-parse --short HEAD)
-        # ビルド生成物はマウントしたディレクトリに残っています
+        # コンテナ内で生成されたバイナリをリネーム
         cp bazel-bin/verilog/tools/lint/verible-verilog-lint ./verible-lint-rhel8-${SHORT_SHA}
 
     - uses: actions/upload-artifact@v4
@@ -51,7 +52,7 @@ jobs:
         path: ./verible-lint-rhel8-*
 
   # ==================================================
-  # Job 2: Windows用ビルド (Manual Setup方式に変更)
+  # Job 2: Windows用ビルド (Fix: バージョン6.5.0強制 & 手動セットアップ)
   # ==================================================
   build-windows:
     runs-on: windows-latest
@@ -59,7 +60,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # アクションを使わず、手動でダウンロードしてPATHに通す (エラー回避)
+    # アクションを使わず、手動でダウンロードしてPATHに通す (Cacheエラー回避)
     - name: Setup Bazelisk Manually
       shell: bash
       run: |
@@ -67,10 +68,11 @@ jobs:
         curl -L https://github.com/bazelbuild/bazelisk/releases/download/v1.18.0/bazelisk-windows-amd64.exe -o $HOME/bin/bazel.exe
         echo "$HOME/bin" >> $GITHUB_PATH
 
-    # WindowsのCacheはトラブルが多いので一旦無効化して確実にビルドを通す
-
     - name: Build Verible Lint (Windows)
       shell: bash
+      # 【重要】Windows側も環境変数でバージョンを固定
+      env:
+        USE_BAZEL_VERSION: 6.5.0
       run: |
         bazel build \
           --jobs=2 \
